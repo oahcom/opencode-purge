@@ -1,0 +1,52 @@
+{
+  "name": "opencode-purge",
+  "version": "1.1.0",
+  "description": "Armour-breaking layer for opencode: host-prompt takeover, approval flattening and neutralised tool descriptions, ported from dsh-purge",
+  "type": "module",
+  "bin": {
+    "opencode-purge": "./bin/opencode-purge.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "plugin",
+    "prompt",
+    "skills",
+    "tools",
+    "docs",
+    "README.md",
+    "README.zh-CN.md",
+    "release-notes.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build:frame": "node tools/build-frame.mjs",
+    "check": "node --check bin/opencode-purge.js && node --check lib/catalog.js && node --check lib/engine.js && node --check lib/deep.js && node --check lib/config-patch.js && node --check lib/paths.js && node --check lib/fsx.js && node --check plugin/opencode-purge.js",
+    "test": "node test/smoke.mjs",
+    "status": "node bin/opencode-purge.js status",
+    "apply": "node bin/opencode-purge.js apply",
+    "revert": "node bin/opencode-purge.js revert"
+  },
+  "keywords": [
+    "opencode",
+    "jailbreak",
+    "system-prompt",
+    "plugin",
+    "dsh-purge",
+    "prompt-injection",
+    "red-team",
+    "llm"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ADeRoy/opencode-purge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ADeRoy/opencode-purge/issues"
+  },
+  "homepage": "https://github.com/ADeRoy/opencode-purge#readme"
+}

@@ -1,0 +1,7 @@
+.github/
+examples/
+docs/
+test/
+node_modules/
+*.bak
+purge/

@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "baseline": "strict",
+  "keepEnv": true,
+  "netScope": false,
+  "neutralizeTools": true,
+  "compaction": true
+}
