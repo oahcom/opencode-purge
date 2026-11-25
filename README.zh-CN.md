@@ -117,7 +117,7 @@ opencode-purge apply
 ```powershell
 opencode-purge status      # 补丁状态、策略、最近注入日志
 opencode-purge apply       # 全部层
-opencode-purge apply --deep    # 追加二进制常量替换（需先关掉 opencode）
+opencode-purge apply --deep    # 追加二进制常量替换（运行中也能打，改名换入；--force 强制）
 opencode-purge revert      # 还原（保留 prompt-inject.md）
 opencode-purge uninstall   # 还原 + 删 purge/
 opencode-purge edit        # 打印注入段

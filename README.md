@@ -127,7 +127,7 @@ itself is re-read on every request, so editing it needs no restart.
 ```powershell
 opencode-purge status          # patches, policy, recent injection log
 opencode-purge apply           # all layers
-opencode-purge apply --deep    # also rewrite the executable (close opencode first)
+opencode-purge apply --deep    # also rewrite the executable (rename-swap while running)
 opencode-purge revert          # restore, keeps prompt-inject.md
 opencode-purge uninstall       # restore + remove purge/
 opencode-purge edit            # print the injection frame
