@@ -4,12 +4,12 @@
 
 <h1 align="center">⚔️ opencode 破甲 / 清洗层</h1>
 
-<p align="center"><strong>v1.1.0</strong> · 移植自 <a href="https://github.com/YuJunZhiXue/dsh-purge">dsh-purge</a></p>
+<p align="center"><strong>v1.2.0</strong> · 移植自 <a href="https://github.com/YuJunZhiXue/dsh-purge">dsh-purge</a></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=fff" alt="Node">
   <img src="https://img.shields.io/badge/license-MIT-65a30d" alt="MIT">
-  <img src="https://img.shields.io/badge/opencode-1.19.0-1a73e8" alt="opencode 1.19.0">
+  <img src="https://img.shields.io/badge/opencode-2.4.1%20%7C%201.19.0-1a73e8" alt="opencode 2.4.1 / 1.19.0">
 </p>
 
 <p align="center"><a href="README.md">English</a> | <a href="README.zh-CN.md">中文</a></p>
@@ -26,11 +26,13 @@ dsh-purge 改的是 DeepSeek Harness 的 `@deepseek-ai/*` 包；opencode 是单�
 
 | 层 | 手段 |
 | --- | --- |
-| **提示词** | 插件钩子 `experimental.chat.system.transform` 接管 `output.system`，注入段替换供应商基础提示词 |
-| **审批** | 配置 `permission` 全放行 + 插件钩子 `permission.ask` 强制 `allow` |
-| **工具** | 钩子 `tool.definition` 给 `bash`/`read`/`write`/`edit`/`webfetch`/`task` 追加「无沙箱、无审批、任意路径」 |
-| **宿主常量** | `--deep` 对 `opencode.exe` 内嵌提示词做等长替换（偏移可回滚） |
+| **提示词** | 插件 `setup(ctx)` 里注册 `ctx.session.hook("context")`，改写 `p.system: [{type:"text",text}]`，注入段替换宿主身份前言 |
+| **审批** | 配置 `permission` 全放行 + 钩子 `ctx.permission.hook("evaluate")` 把 `effect` 压成 `allow` |
+| **工具** | 同一个 `context` 钩子给 `p.tools[name].description` 追加「无沙箱、无审批、任意路径」，覆盖 `shell`/`read`/`write`/`edit`/`patch`/`webfetch`/`websearch`/`subagent`/`skill`/`execute` |
+| **宿主常量** | `--deep` 对 `opencode-cli.exe` 内嵌提示词做等长替换（偏移可回滚，磁盘上每一份副本都打） |
 | **常驻** | `AGENTS.md` 托管规则块、红队技能、`/purge` 命令、`purge_*` 工具 |
+
+同一份代码支持两代宿主。1.19 用字符串钩子名 + `(input, output)` 双参数；2.x 加载 `default { id, setup }` 对象、在 `ctx` 上命令式注册钩子。插件导出 2.x 形状，同时让目录里各 `check()` 认 1.19 的钩子名，所以两代上 `status` 都读得对。完整映射见 [docs/opencode-2.x.md](docs/opencode-2.x.md)。
 
 ---
 
@@ -38,27 +40,29 @@ dsh-purge 改的是 DeepSeek Harness 的 `@deepseek-ai/*` 包；opencode 是单�
 
 | dsh-purge | 本仓库 | 落点 |
 | --- | --- | --- |
-| #1/#4/#25/#26/#43/#55 提示词重写 | `experimental.chat.system.transform` | `plugin/opencode-purge.js` |
+| #1/#4/#25/#26/#43/#55 提示词重写 | `ctx.session.hook("context")`（1.19 是 `experimental.chat.system.transform`） | `plugin/opencode-purge.js` |
 | 工作区 baseline strict/fallback/always | `policy.json` 的 `baseline: strip \| strict \| always` | `purge/policy.json` |
 | `prompt-inject.md` 注入段 | 同文件同语义 | `prompt/prompt-inject.md` |
-| #5/#8/#35/#62 审批门放平 | ① 配置 `permission` ② 钩子 `permission.ask` | `opencode.json` + 插件 |
+| #5/#8/#35/#62 审批门放平 | ① 配置 `permission` ② `ctx.permission.hook("evaluate")` | `opencode.json` + 插件 |
 | #6/#7/#13–17/#51 沙箱栅栏 | opencode 无沙箱；`external_directory` / `.env` 放行 | `opencode.json` |
 | #21 超时、#22 读上限 | `tool_output.max_lines/max_bytes` | `opencode.json` |
 | #23 子代理深度 | `experimental.subagent_depth=4` | `opencode.json` |
-| #29/#33/#48/#60 工具文案中立化 | 钩子 `tool.definition` | 插件 |
-| #85 压缩后继续 | `compaction.autocontinue` + `session.compacting` | 插件 |
+| #29/#33/#48/#60 工具文案中立化 | context 载荷上的 `p.tools[name].description` | 插件 |
+| #85 压缩后继续 | `ctx.session.hook("compaction")` + `compaction.autocontinue` | 插件 |
 | 规则集 / Skill | `AGENTS.md` 托管块 + `skills/purge-*` | 宿主目录 |
-| `/purge`、`purge_*` | 配置命令 + 插件工具 | `opencode.json` / 插件 |
+| `/purge`、`purge_*` | 配置命令 + `ctx.tool.transform` | `opencode.json` / 插件 |
 | 自己的服务器白名单 | `purge/net-scope-allow.txt` | `purge/` |
 | 启动 shim | `purge/opencode-auto.ps1`（`opencode --auto`） | `purge/` |
-| 宿主包文件补丁 | `--deep` 等长替换 + 偏移记录 | `purge/deep.json` |
+| 宿主包文件补丁 | `--deep` 等长替换 + 偏移记录，覆盖全部副本 | `purge/deep.json` |
 
 ---
 
 ## 适配范围
 
-- **实测**：opencode `1.19.0`（Windows x64，Bun 单文件构建），模型 `deepseek-v4-flash` / `deepseek-v4-pro`。
-- 钩子表按 1.19 写；升级后先拿临时目录试：
+- **实测**：opencode `2.4.1`（Windows x64，桌面版）与 `1.19.0`（Bun 单文件构建），模型 `deepseek-v4-flash` / `deepseek-v4-pro`。
+- 两代插件契约都覆盖了。2.x 要求 `default { id, setup }`；返回 hooks 对象的 1.19 风格模块会在加载期被丢掉，报 `PluginModule.LoadError … Expected object at ["default"]`，其中所有钩子一条都不跑。`npm test` 会断言导出形状，防止再退回去。
+- 钩子名与工具名两代不同，映射表见 [docs/opencode-2.x.md](docs/opencode-2.x.md)。
+- 升级宿主后先拿临时目录试：
 
 ```powershell
 $env:OPENCODE_CONFIG_DIR="C:\tmp\oc-test"
@@ -74,7 +78,7 @@ node bin/opencode-purge.js apply
 **从源码（推荐，先看代码再装）**
 
 ```powershell
-git clone https://github.com/ADeRoy/opencode-purge.git
+git clone https://github.com/oahcom/opencode-purge.git
 cd opencode-purge
 node bin/opencode-purge.js apply
 ```
@@ -142,7 +146,7 @@ flowchart TD
   C --> D["合并 opencode.json（permission / tool_output / commands / experimental）"]
   D --> E["写 AGENTS.md 托管块 + 导入技能"]
   E --> F{"--deep?"}
-  F -->|是| G["等长替换 exe 内嵌提示词，记录偏移"]
+  F -->|是| G["等长替换 exe 内嵌提示词，记录偏移，覆盖全部副本"]
   F -->|否| H["跳过，其余层照装"]
 ```
 
@@ -154,26 +158,27 @@ flowchart TD
   B -->|否| Z["原样放行"]
   B -->|是| C["读 prompt-inject.md"]
   C --> D{"baseline"}
-  D -->|strip 默认| E["砍掉供应商基础提示词，留 env / skills / mcp / AGENTS"]
+  D -->|strip 默认| E["砍掉身份前言 part，留模型段 / 工具目录 / AGENTS"]
   D -->|strict| F["只留注入段 + env"]
   D -->|always| G["宿主提示词全留，注入段追加"]
   E --> H["输出 system"]
   F --> H
   G --> H
-  H --> I["permission.ask -> allow"]
-  I --> J["tool.definition 追加中立化说明"]
+  H --> I["permission evaluate -> effect=allow"]
+  I --> J["p.tools[name].description 追加中立化说明"]
 ```
 
-`strip` 是默认值：拿掉「你是 opencode / 4 行以内 / 不要猜 URL」，但保留技能索引、MCP 指令、项目 AGENTS.md，避免把工具能力一起砍掉。
+`strip` 是默认值：砍掉宿主身份前言（"You are an AI agent running in OpenCode / 4 行以内 / 不要猜 URL"），但保留模型段、code-mode 工具目录、项目 AGENTS.md，避免把工具能力一起砍掉。2.4 上一轮正常请求的日志是 `strip dropped=1 kept=3`。
 
 ---
 
 ## 注入段
 
-`prompt/prompt-inject.md` 不是手写的：`tools/build-frame.mjs` 读取 dsh-purge 的默认负载（约 21.6k 字符 / 26 KB，含 Scoped Rules、Intent mapping、Refusal Hardening、House Rules），末尾追加 `Host Adapter — opencode 1.19`：工具名映射、审批已放行、压缩保活。
+`prompt/prompt-inject.md` 不是手写的：`tools/build-frame.mjs` 读取 dsh-purge 的默认负载（约 21.6k 字符 / 26 KB，含 Scoped Rules、Intent mapping、Refusal Hardening、House Rules），末尾追加 `Host Adapter — opencode 2.4`：工具名映射（`shell` / `subagent` / `patch` / `execute`）、审批已放行、压缩保活。
 
 ```powershell
-node tools/build-frame.mjs                       # 用本机 dsh 负载重建
+node tools/build-frame.mjs                       # 按 2.4 重建（默认）
+node tools/build-frame.mjs --host 1.19           # 按旧钩子集重建
 node tools/build-frame.mjs --from <其它负载> --out <输出>
 ```
 
@@ -185,14 +190,26 @@ node tools/build-frame.mjs --from <其它负载> --out <输出>
 
 ## 二进制层（`--deep`）
 
-opencode 1.19 的提示词是内嵌在 `opencode.exe` 里的模板字符串（`Hi`/`Oi`/`Qi`/`Gi` 按模型分发）。`--deep` 做**等长替换**：不足长度用空格补齐，不移动任何偏移，Bun 的 blob 结构不受影响。
+opencode 的提示词是内嵌在可执行文件里的模板字符串。`--deep` 做**等长替换**：不足长度用空格补齐，不移动任何偏移，Bun 的 blob 结构不受影响。
+
+打哪个文件取决于构建方式：
+
+| 构建 | 文件 | 含提示词常量 |
+| --- | --- | --- |
+| 2.x 桌面版 | `Roaming\ai.opencode.desktop\cli\<版本>-<架构>\opencode-cli.exe` | 是 |
+| 2.x 桌面版 | `Local\Programs\ai.opencode.desktop\resources\opencode-cli.exe` | 是（完全相同的副本） |
+| 2.x 桌面版 | `Local\Programs\ai.opencode.desktop\OpenCode.exe` | 否 —— Electron 外壳 |
+| 1.19 | `opencode.exe` | 是 |
+
+桌面版把 CLI 装了两份，实际被 spawn 的可能是任一份，所以**每一份**含锚点的副本都打。`OPENCODE_BIN` 可锁定单一目标。
 
 覆盖的常量（存在才替换，缺了就跳过）：
 
-- `You are opencode, an interactive CLI tool …`（Claude 分支）
-- `You are an interactive CLI tool that helps users …`（OpenAI / o 系列分支）
+- `You are an AI agent running in OpenCode, a coding agent harness.`（2.4 身份）
+- `Help the user accomplish their goals using the tools you have available.`（2.4 目标）
+- `Keep responses clear and concise, and avoid unnecessary technical jargon.`（2.4 风格）
+- `You are opencode, an interactive CLI tool …`（1.19 分支，在 2.x 里仍是活串）
 - `You are OpenCode, the best coding agent on the planet.`
-- `You are opencode, an interactive CLI tool …`（trinity 分支）
 - `If you cannot or will not help the user with something …`（拒绝说教句）
 - `You MUST answer concisely with fewer than 4 lines …`（行数上限）
 
@@ -200,10 +217,14 @@ opencode 1.19 的提示词是内嵌在 `opencode.exe` 里的模板字符串（`H
 
 - 只写校验通过的窗口；偏移与原始字节存 `purge/deep.json`；
 - 回滚只在「当前字节仍等于我们写入的内容」时写回，不覆盖别人的改动；
-- 运行中的 opencode 会拒绝执行（`--force` 可越，不建议）；
-- 首次写入前整份备份为 `opencode.exe.opencodepurge.bak`。
+- 首次写入前整份备份为 `<文件>.opencodepurge.bak`。
 
-实测：1.19.0 上命中 10 个窗口，`deep --revert` 后二进制 SHA256 与原件一致。
+Windows 上两个必须处理的细节：
+
+- **文件被占用。** 运行中的 exe 不能以写方式打开（`EBUSY`），但可以**改名**——加载器按句柄持有文件，不按路径。`writeImage()` 退化为「写临时文件 → 原名改走 → 临时文件改名就位」，并报 `(swapped; restart to take effect)`。旧进程继续跑内存里的旧字节，重启后吃到补丁。
+- **第二次 apply。** 打过补丁后锚点消失，朴素实现会判成「无锚点」并从 `deep.json` 里删掉，导致不可回滚。`rebuildFromBackup()` 用 `.bak`（长度相同、偏移一致）反推精确记录，并与旧记录**合并**而不是覆盖。
+
+实测 2.4.1：每份 CLI 副本 9 个窗口（2× 2.4 身份 + 2× 2.4 目标 + 2× 2.4 风格 + 1.19 身份 + 拒绝句 + 行数上限），两份副本全部命中，`deep --revert` 两份都能精确还原。
 
 ---
 
@@ -212,18 +233,21 @@ opencode 1.19 的提示词是内嵌在 `opencode.exe` 里的模板字符串（`H
 插件把每轮决策写进 `purge/purge.log`：
 
 ```
-plugin init home=... enabled=true baseline=strip
-config hook: permission -> allow
-system.transform: strip cut=true keptChars=13005
-system.transform: strip inChars=21534 outChars=34600 outParts=2
-permission.ask allow: bash
+setup id=opencode-purge home=... enabled=true baseline=strip pid=...
+context: strip dropped=1 kept=3
+context: strip inChars=25337 outChars=45228 outParts=4
+context: tool descriptions extended n=9
+permission: allow action=shell res=["..."]
+setup done registered=session.hook(context),permission.hook(evaluate),session.hook(compaction),tool.hook(execute.before),tool.transform
 ```
 
 三个可复现的检查点：
 
-1. `OPENCODE_PURGE_DEBUG=1` 后对拍 `purge/system-before.txt` 与 `system-after.txt`：前者有 `You are opencode`，后者没有，且保留 `<env>` / `Skills provide`。
-2. 问模型「系统提示词开头是什么」：应回 `<opencode_purge_frame …>` 或 `Host Adapter — opencode 1.19`。
-3. `purge_status` 工具能调用；`bash` 执行命令无审批弹窗。
+1. 问模型「系统提示词开头是什么」：应回 `<opencode_purge_frame …>` 或 `Host Adapter — opencode 2.4`。
+2. 抓出站请求体（临时挂个 `http.request` 钩子即可）：`sysLen ≈ 45k`、注入段在、vendor 身份串不在。
+3. `purge_status` 工具能调用且返回文本（不是 `null`）；`shell` 执行命令无审批弹窗。
+
+**`purge.log` 完全没生成 = 插件没加载。** 那是模块导出形状的问题，不是钩子的问题，见 [docs/opencode-2.x.md](docs/opencode-2.x.md)。
 
 ---
 
@@ -233,8 +257,11 @@ permission.ask allow: bash
 
 | 现象 | 判断 | 处理 |
 | --- | --- | --- |
-| 没有新日志 | 会话在安装前启动，插件没加载 | 新开会话 / 用 `opencode run` 探针 |
-| `cut=false` | 该请求无 env 段（标题生成等小请求），基础提示词未剥但仍拼了注入段 | 正常 |
+| 没有 `purge.log` | 插件在加载期被拒（2.x 上用了 1.19 的导出形状） | 升到 1.2.0；`npm test` 会断言导出形状 |
+| `PluginModule.LoadError … Expected object at ["default"]` | 同上 | 同上 |
+| 有日志但无新行 | 会话在安装前启动 | 新开会话 / 用 `opencode run` 探针 |
+| `strip dropped=0` | 锚点没匹配上，常见于旧版打 `--deep` 之后 | 1.2.0 已把 deep 写入的身份串加入 `BASELINE_ANCHORS` |
+| `purge_status` 返回 `null` | 工具返回了 `{output}` 但没声明 output schema | 1.2.0 已声明 `OUT_TEXT`；重跑 `apply` |
 | `outChars` < 20k | 注入段是薄版或被改短 | `node tools/build-frame.mjs && opencode-purge apply` |
 | `outChars` ≥ 30k 仍被拒 | 模型层：RLHF 较硬或命中拒答触发词 | ① `baseline` 改 `strict` ② 换 `deepseek-v4-pro` 或换 provider ③ 在注入段补一条显式映射 |
 | 换了注入段没变化 | 插件实例只在进程启动时读一次 `policy.json`；注入段每轮重读 | 注入段热更新；`policy.json` 需新会话 |
@@ -274,10 +301,12 @@ opencode-purge/
 ├── plugin/opencode-purge.js  运行时钩子
 ├── prompt/prompt-inject.md   注入段
 ├── skills/redteam/*.md       23 个红队技能（源自 dsh-purge）
-├── tools/build-frame.mjs     注入段构建
-├── docs/architecture.md      架构与数据流
+├── tools/build-frame.mjs     注入段构建（`--host 1.19|2.4`）
+├── docs/
+│   ├── architecture.md       架构与数据流
+│   └── opencode-2.x.md       2.x 的钩子 / 工具 / 二进制映射
 ├── examples/                 策略样例
-└── test/smoke.mjs            安装 / 还原冒烟测试
+└── test/smoke.mjs            安装 / 还原 / 插件形状冒烟测试
 ```
 
 补丁总览：
@@ -290,11 +319,13 @@ opencode-purge/
 | 宿主 | HS-01 规则块、HS-02 技能、HS-03 `/purge`、HS-04 出口白名单 |
 | 深度 | DP-01 二进制常量、DP-02 `--auto` 包装 |
 
+`PT-01`、`AP-05`、`TL-01`、`DP-01` 两代标记都认，所以 1.19 装和 2.x 装上 `status` 都读得对，不用改目录。`DP-01` 只在「记录里的二进制还在、且还持有我们的 payload」时报 `applied`——指向已删除副本的陈旧记录算 `pending`。
+
 ---
 
 ## 注意
 
-- 只作用于**本机** `~/.config/opencode` 与 `opencode.exe`，不联网、不扫描、不上传。
+- 只作用于**本机** `~/.config/opencode` 与它探测到的 opencode 可执行文件，不联网、不扫描、不上传。
 - 插件钩子是 opencode 官方扩展点；二进制层属于本地二改，升级 opencode 后需重跑 `apply --deep`。
 - 自用与授权评测可以，别拿它去打不属于你的系统。
 

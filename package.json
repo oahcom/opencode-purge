@@ -1,6 +1,6 @@
 {
   "name": "opencode-purge",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Armour-breaking layer for opencode: host-prompt takeover, approval flattening and neutralised tool descriptions, ported from dsh-purge",
   "type": "module",
   "bin": {
@@ -43,10 +43,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ADeRoy/opencode-purge.git"
+    "url": "https://github.com/oahcom/opencode-purge.git"
   },
   "bugs": {
-    "url": "https://github.com/ADeRoy/opencode-purge/issues"
+    "url": "https://github.com/oahcom/opencode-purge/issues"
   },
-  "homepage": "https://github.com/ADeRoy/opencode-purge#readme"
+  "homepage": "https://github.com/oahcom/opencode-purge#readme",
+  "upstream": "https://github.com/ADeRoy/opencode-purge"
 }

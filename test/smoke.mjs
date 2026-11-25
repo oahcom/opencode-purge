@@ -10,7 +10,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const cli = path.join(root, "bin", "opencode-purge.js")
@@ -48,6 +48,22 @@ check("self copy installed", fs.existsSync(path.join(home, "purge", "app", "bin"
 check("policy written", fs.existsSync(path.join(home, "purge", "policy.json")))
 check("agents rules written", fs.readFileSync(path.join(home, "AGENTS.md"), "utf8").includes("opencode-purge:begin"))
 check("skills imported", fs.readdirSync(path.join(home, "skills")).some((d) => d.startsWith("purge-")))
+
+// The host validates a plugin module against `default { id, effect } | { id, setup }`.
+// A module whose default is a bare function is dropped at load with
+// "PluginModule.LoadError … Expected object at [\"default\"]", and every hook in it
+// silently never runs. Import the installed copy and assert the shape.
+{
+  const mod = await import(pathToFileURL(path.join(home, "plugins", "opencode-purge.js")).href)
+  const def = mod.default
+  check("plugin default is an object", def !== null && typeof def === "object")
+  check("plugin default has an id", typeof def?.id === "string" && def.id.length > 0)
+  check(
+    "plugin default has effect or setup",
+    typeof def?.effect === "function" || typeof def?.setup === "function",
+  )
+  check("named export matches default", mod.OpencodePurge === def)
+}
 
 const merged = JSON.parse(fs.readFileSync(configPath, "utf8"))
 check("permission flattened", merged.permission?.["*"] === "allow")
