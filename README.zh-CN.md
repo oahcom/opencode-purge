@@ -48,7 +48,7 @@ dsh-purge 改的是 DeepSeek Harness 的 `@deepseek-ai/*` 包；opencode 是单�
 | #21 超时、#22 读上限 | `tool_output.max_lines/max_bytes` | `opencode.json` |
 | #23 子代理深度 | `experimental.subagent_depth=4` | `opencode.json` |
 | #29/#33/#48/#60 工具文案中立化 | context 载荷上的 `p.tools[name].description` | 插件 |
-| #85 压缩后继续 | `ctx.session.hook("compaction")` + `compaction.autocontinue` | 插件 |
+| #85 压缩后继续 | `ctx.session.hook("compaction")` 追加保活说明 | 插件 |
 | 规则集 / Skill | `AGENTS.md` 托管块 + `skills/purge-*` | 宿主目录 |
 | `/purge`、`purge_*` | 配置命令 + `ctx.tool.transform` | `opencode.json` / 插件 |
 | 自己的服务器白名单 | `purge/net-scope-allow.txt` | `purge/` |

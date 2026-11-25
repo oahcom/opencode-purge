@@ -58,7 +58,7 @@ See [docs/opencode-2.x.md](docs/opencode-2.x.md) for the full mapping.
 | #21 timeout, #22 read caps | `tool_output.max_lines/max_bytes` | `opencode.json` |
 | #23 subagent depth | `experimental.subagent_depth=4` | `opencode.json` |
 | #29/#33/#48/#60 tool copy | `p.tools[name].description` on the context payload | plugin |
-| #85 keep going after compaction | `ctx.session.hook("compaction")` + `compaction.autocontinue` | plugin |
+| #85 keep going after compaction | `ctx.session.hook("compaction")` appends a keep-note | plugin |
 | rulesets / skills | managed `AGENTS.md` block + `skills/purge-*` | config dir |
 | `/purge`, `purge_*` | config command + `ctx.tool.transform` | `opencode.json` / plugin |
 | own-server allowlist | `purge/net-scope-allow.txt` | `purge/` |
