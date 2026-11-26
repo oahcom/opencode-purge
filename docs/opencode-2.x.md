@@ -5,7 +5,6 @@
 created and the system prompt was untouched. This page records what changed and why.
 
 ## 1. Plugin module shape
-
 2.x loads plugins through `PluginModule.loadServer` and validates the module's `default`
 export against an Effect schema that accepts exactly two shapes:
 
@@ -215,7 +214,102 @@ and drop the binary from `deep.json`, losing the revert record. Two changes:
   copy that was locked last time; the earlier one still holds our payload and still needs to
   be revertible.
 
-## 9. Anchor inventory on 2.4.1
+## 9. Permissions moved to an ordered array
+
+This is the second "green but inert" trap, and it is worse than the plugin one because
+nothing errors at all.
+
+1.19 flattened approvals with a single object under `permission`:
+
+```json
+"permission": { "*": "allow", "external_directory": "allow", "read": { "*.env": "allow" } }
+```
+
+2.4's config root has no such key. The schema (from the binary, `Config` object) is:
+
+```js
+permissions: WE.pipe(_)   // WE = E(zce); zce = t({ action:H, resource:H, effect:gHe })
+                          // description: "Ordered tool permission rules applied to agent tool use"
+```
+
+`permission` (singular) appears **zero** times at the config root. The object we used to
+write was dead JSON — which is why `status` reported AP-01…AP-04 as applied while the
+host behaved exactly as if no config existed.
+
+The resolver has two properties that dictate how the array must be written:
+
+```js
+// last match wins
+function t4(e, i, ...s) {
+  return s.flat().findLast((d) => O1(e, d.action) && O1(i, d.resource)) ?? { action: e, resource: "*", effect: "ask" }
+}
+// config rules are appended, not merged
+function x9(...e) { return e.flat() }
+B: x9(PH?.permissions ?? rD, mH.permissions ?? [])
+```
+
+So rules must go at the **end**, and duplicates must be dropped by `(action, resource)`
+rather than by identity, otherwise a second apply grows the array.
+
+The stock `Agent.Info` default is already permissive:
+
+```js
+permissions: [
+  { action: "*",    resource: "*",           effect: "allow" },
+  { action: "read", resource: "*.env",       effect: "ask"   },
+  { action: "read", resource: "*.env.*",     effect: "ask"   },
+  { action: "read", resource: "*.env.example", effect: "allow" },
+]
+```
+
+Which means the only rule that actually changes behaviour on a stock install is the
+`.env` one. Measured by replaying `t4` against the written config:
+
+| action | resource | vanilla | with purge |
+| --- | --- | --- | --- |
+| `read` | `.env` | `ask` | **`allow`** |
+| `read` | `config/.env.local` | `ask` | **`allow`** |
+| `read` | `config/.env.example` | `allow` | `allow` |
+| `edit` | `/etc/passwd` | `allow` | `allow` |
+| `execute` | `rm -rf /` | `allow` | `allow` |
+| `external_directory` | `/d/data` | `allow` | `allow` |
+
+AP-01…AP-03 therefore only matter on an install where the user tightened the defaults;
+AP-04 is the one that does work on a clean 2.4. Both generations are still written
+(`permission` **and** `permissions`) so one install serves 1.19 and 2.x.
+
+### Why nothing complained
+
+2.4 does not reject unknown config keys. Verified by running the real binary against a
+config containing `"permission": {…}` **and** `"bogus_key_xyz": 123`:
+
+```
+> build · 9router_hermes
+OK
+EXIT=0
+```
+
+The same config with a valid `permissions` array also exits 0. There is no warning, no
+schema error, no log line either way — a typo'd or stale key is simply ignored. That is
+why the 1.19 permission block survived an upgrade looking healthy: `status` read the
+file it had just written, not the behaviour the host derived from it.
+
+Any check in this tool that only inspects `opencode.json` can therefore be a false
+positive. The assertions in `npm test` cover the written shape; the `t4` replay above is
+what covers the meaning.
+
+Two other config keys were checked against the schema and are real:
+
+```js
+EA = ["logLevel", "server", "subagent_depth", "layout"]
+yA = ["disable_paste_summary", "batch_tool", "openTelemetry", "primary_tools", "continue_loop_on_deny"]
+```
+
+`experimental` is allow-listed to those names, and both `subagent_depth` (TL-02) and
+`continue_loop_on_deny` are on it. `tool_output.max_lines` / `.max_bytes` (TL-03) appear
+in the truncation code path, and `commands` is `K(H, Ej)` — all live.
+
+## 10. Anchor inventory on 2.4.1
 
 9 windows per CLI copy:
 
@@ -235,7 +329,7 @@ including tool use or code generation), unless user asks for detail.` variant ma
 anchor; the shorter `…4 lines (not including…)` variant belongs to a different prompt branch
 and is left alone. Revert restores exactly what was written, so the distinction is harmless.
 
-## 10. Verification
+## 11. Verification
 
 ```powershell
 node bin/opencode-purge.js status

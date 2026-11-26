@@ -68,6 +68,31 @@ check("skills imported", fs.readdirSync(path.join(home, "skills")).some((d) => d
 const merged = JSON.parse(fs.readFileSync(configPath, "utf8"))
 check("permission flattened", merged.permission?.["*"] === "allow")
 check("doom_loop allowed", merged.permission?.doom_loop === "allow")
+
+// 2.x reads `permissions` (ordered array, LAST match wins) and ignores the
+// singular key entirely. Assert the array exists, ends with our allows, and
+// that the stock `.env = ask` default is overridden by position.
+check("permissions array written", Array.isArray(merged.permissions))
+check(
+  "permissions allow-all",
+  merged.permissions?.some((r) => r.action === "*" && r.resource === "*" && r.effect === "allow"),
+)
+check(
+  "permissions external_directory allow",
+  merged.permissions?.some((r) => r.action === "external_directory" && r.effect === "allow"),
+)
+check(
+  "permissions doom_loop allow",
+  merged.permissions?.some((r) => r.action === "doom_loop" && r.effect === "allow"),
+)
+check(
+  "permissions .env read allowed",
+  merged.permissions?.some((r) => r.action === "read" && String(r.resource).includes(".env") && r.effect === "allow"),
+)
+check(
+  "permissions rules are last",
+  merged.permissions?.[merged.permissions.length - 1]?.action === "read",
+)
 check("tool_output raised", merged.tool_output?.max_lines >= 20000)
 check("purge command present", Boolean(merged.commands?.purge))
 check("provider config preserved", merged.provider?.test?.models?.m?.name === "M")

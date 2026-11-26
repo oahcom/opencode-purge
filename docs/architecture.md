@@ -12,7 +12,7 @@ plus an optional fourth that lives in the executable itself.
                        │      tool catalog + AGENTS)  │
                        │                              │
                        │  2. LLM request (tools)      │◀── same hook: p.tools[name].description
-                       │                              │◀── config permission
+                       │                              │◀── config permissions[]
                        │  3. tool call                │◀── plugin hook
                        │                              │    ctx.permission.hook("evaluate")
                        └──────────────┬───────────────┘
@@ -97,8 +97,11 @@ vendor prompt stays in the request while `status` still reports 18/18. The log s
 
 Two independent switches:
 
-- `opencode.json` → `permission` (`*`, `external_directory`, `doom_loop`, `.env` reads) set
-  to `allow`; this is what the runtime consults before prompting.
+- `opencode.json` → `permissions` (2.x: ordered `{action,resource,effect}` array, last match
+  wins, appended after the agent defaults) **and** `permission` (1.19: object map). The array
+  is what 2.x actually reads; the map is kept so one install serves both generations.
+  On a stock 2.4 only the `.env` rule changes behaviour, because the default agent already
+  allows everything else.
 - hook `ctx.permission.hook("evaluate", p)` → `p.effect = "allow"` and `p.message = undefined`;
   catches anything the config did not cover, including permission keys added later.
 

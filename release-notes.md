@@ -46,6 +46,25 @@
   `Tool result declared output without an output schema`。`purge_*` 三个工具统一声明
   `OUT_TEXT`
 
+**审批层（1.2.0 修正：2.4 的权限键换了）**
+
+- 1.19 用单个对象 `permission: {"*":"allow", …}`；**2.4 的 config 根没有这个键**，schema 是
+  `permissions: Array<{action,resource,effect}>`（`Permission.Ruleset`）。旧写法在 2.4 上是
+  死数据——`status` 报 AP-01…AP-04 applied，宿主行为跟没装一样
+- 解析语义有两条硬约束：`t4()` 用 `findLast`（**最后一条匹配生效**），`x9()` 只做
+  `(...).flat()` 拼接（config 规则**追加在 agent 默认值之后**，不覆盖）。所以规则必须写在
+  数组**末尾**
+- 改为同时写两代：`permissions`（2.x 数组）+ `permission`（1.19 映射）。去重按
+  `(action, resource)`，避免重复 apply 让数组无限增长
+- `CONFIG_KEYS` 补 `permissions`，否则 `revert` 不还原这个键
+- **实测**：stock 2.4 的 `Agent.Info` 默认值本来就是 `*/*=allow`，只有 `read *.env*` 是
+  `ask`。所以真正改行为的是 AP-04；AP-01…03 只在用户自己收紧过默认值时才有效。用
+  `t4` 复刻判定对拍：`read .env` 从 `ask` → `allow`，其余不变
+- 其余配置键逐个对 schema 核过，都是真的：`experimental` 是白名单
+  `["logLevel","server","subagent_depth","layout"]` + `[...,"continue_loop_on_deny"]`，
+  `subagent_depth` / `continue_loop_on_deny` 都在；`tool_output.max_lines/max_bytes` 出现在
+  截断代码路径；`commands` 是 `K(H, Ej)`；`compaction` 是 `bool()`
+
 **二进制层**
 
 - `detectOpenCodeBinaries()` 返回全部候选（去重、>20 MB）：桌面版把 CLI 装了两份
@@ -106,7 +125,8 @@
 
 **审批层**
 
-- 配置 `permission`：`*` / `external_directory` / `doom_loop` / `.env` 全放行
+- 配置 `permission`：`*` / `external_directory` / `doom_loop` / `.env` 全放行（1.19 写法；
+  2.4 起改为 `permissions` 数组，见 1.2.0 的「审批层」修正）
 - 钩子 `permission.ask` 强制 `allow`，`config` 钩子再兜一层
 - `opencode.json` 改动有前置快照，`revert` 逐字节还原
 

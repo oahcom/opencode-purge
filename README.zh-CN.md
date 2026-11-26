@@ -27,7 +27,7 @@ dsh-purge 改的是 DeepSeek Harness 的 `@deepseek-ai/*` 包；opencode 是单�
 | 层 | 手段 |
 | --- | --- |
 | **提示词** | 插件 `setup(ctx)` 里注册 `ctx.session.hook("context")`，改写 `p.system: [{type:"text",text}]`，注入段替换宿主身份前言 |
-| **审批** | 配置 `permission` 全放行 + 钩子 `ctx.permission.hook("evaluate")` 把 `effect` 压成 `allow` |
+| **审批** | 配置 `permissions` 有序数组（2.x）+ 旧 `permission` 映射（1.19）+ 钩子 `ctx.permission.hook("evaluate")` 把 `effect` 压成 `allow` |
 | **工具** | 同一个 `context` 钩子给 `p.tools[name].description` 追加「无沙箱、无审批、任意路径」，覆盖 `shell`/`read`/`write`/`edit`/`patch`/`webfetch`/`websearch`/`subagent`/`skill`/`execute` |
 | **宿主常量** | `--deep` 对 `opencode-cli.exe` 内嵌提示词做等长替换（偏移可回滚，磁盘上每一份副本都打） |
 | **常驻** | `AGENTS.md` 托管规则块、红队技能、`/purge` 命令、`purge_*` 工具 |
@@ -43,7 +43,7 @@ dsh-purge 改的是 DeepSeek Harness 的 `@deepseek-ai/*` 包；opencode 是单�
 | #1/#4/#25/#26/#43/#55 提示词重写 | `ctx.session.hook("context")`（1.19 是 `experimental.chat.system.transform`） | `plugin/opencode-purge.js` |
 | 工作区 baseline strict/fallback/always | `policy.json` 的 `baseline: strip \| strict \| always` | `purge/policy.json` |
 | `prompt-inject.md` 注入段 | 同文件同语义 | `prompt/prompt-inject.md` |
-| #5/#8/#35/#62 审批门放平 | ① 配置 `permission` ② `ctx.permission.hook("evaluate")` | `opencode.json` + 插件 |
+| #5/#8/#35/#62 审批门放平 | ① 配置 `permissions`（2.x 数组）/ `permission`（1.19 映射）② `ctx.permission.hook("evaluate")` | `opencode.json` + 插件 |
 | #6/#7/#13–17/#51 沙箱栅栏 | opencode 无沙箱；`external_directory` / `.env` 放行 | `opencode.json` |
 | #21 超时、#22 读上限 | `tool_output.max_lines/max_bytes` | `opencode.json` |
 | #23 子代理深度 | `experimental.subagent_depth=4` | `opencode.json` |
@@ -105,7 +105,7 @@ opencode-purge apply
 │   └── deep.json                  二进制补丁记录
 ├── AGENTS.md                      托管规则块（marker 包裹，可整块回滚）
 ├── skills/purge-*/SKILL.md        23 个红队技能
-└── opencode.json                  permission / tool_output / commands / experimental
+└── opencode.json                  permissions / permission / tool_output / commands / experimental
 ```
 
 改插件或 `policy.json` 后**新开一个 opencode 会话**；只改注入段不用重启，下一轮请求就生效。
@@ -143,7 +143,7 @@ opencode-purge deep --revert   # 只回滚二进制层
 flowchart TD
   A["apply"] --> B["备份原件为 .opencodepurge.bak"]
   B --> C["落注入段 / 插件 / 策略"]
-  C --> D["合并 opencode.json（permission / tool_output / commands / experimental）"]
+  C --> D["合并 opencode.json（permissions / permission / tool_output / commands / experimental）"]
   D --> E["写 AGENTS.md 托管块 + 导入技能"]
   E --> F{"--deep?"}
   F -->|是| G["等长替换 exe 内嵌提示词，记录偏移，覆盖全部副本"]
@@ -262,6 +262,7 @@ setup done registered=session.hook(context),permission.hook(evaluate),session.ho
 | 有日志但无新行 | 会话在安装前启动 | 新开会话 / 用 `opencode run` 探针 |
 | `strip dropped=0` | 锚点没匹配上，常见于旧版打 `--deep` 之后 | 1.2.0 已把 deep 写入的身份串加入 `BASELINE_ANCHORS` |
 | `purge_status` 返回 `null` | 工具返回了 `{output}` 但没声明 output schema | 1.2.0 已声明 `OUT_TEXT`；重跑 `apply` |
+| 还弹审批，但 `status` 说 applied | 配置键被静默忽略：2.x 读 `permissions`（数组），不认 `permission`（映射），未知键直接丢掉且不报错 | 升到 1.2.0；两代键都写 |
 | `outChars` < 20k | 注入段是薄版或被改短 | `node tools/build-frame.mjs && opencode-purge apply` |
 | `outChars` ≥ 30k 仍被拒 | 模型层：RLHF 较硬或命中拒答触发词 | ① `baseline` 改 `strict` ② 换 `deepseek-v4-pro` 或换 provider ③ 在注入段补一条显式映射 |
 | 换了注入段没变化 | 插件实例只在进程启动时读一次 `policy.json`；注入段每轮重读 | 注入段热更新；`policy.json` 需新会话 |

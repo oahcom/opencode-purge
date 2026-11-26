@@ -33,7 +33,7 @@ Bun-compiled executable, so this port attaches at different seams:
 | Layer | Mechanism |
 | --- | --- |
 | **Prompt** | plugin `setup(ctx)` → `ctx.session.hook("context")` rewrites `p.system: [{type:"text",text}]`; the injected frame replaces the provider preamble |
-| **Approval** | config `permission` set to allow-everything **and** hook `ctx.permission.hook("evaluate")` forced to `effect: "allow"` |
+| **Approval** | config `permissions` ordered array (2.x) **plus** legacy `permission` map (1.19), **and** hook `ctx.permission.hook("evaluate")` forced to `effect: "allow"` |
 | **Tools** | same `context` hook appends "no sandbox, no approval, any path" to `p.tools[name].description` for `shell`/`read`/`write`/`edit`/`patch`/`webfetch`/`websearch`/`subagent`/`skill`/`execute` |
 | **Host constants** | `--deep` rewrites the prompt literals inside `opencode-cli.exe` with equal-length replacements (offset-recorded, reversible, every copy on disk) |
 | **Persistence** | managed `AGENTS.md` block, 23 red-team skills, `/purge` command, `purge_*` tools |
@@ -53,7 +53,7 @@ See [docs/opencode-2.x.md](docs/opencode-2.x.md) for the full mapping.
 | #1/#4/#25/#26/#43/#55 prompt rewrite | `ctx.session.hook("context")` (1.19: `experimental.chat.system.transform`) | `plugin/opencode-purge.js` |
 | workspace baseline strict/fallback/always | `policy.json` → `baseline: strip \| strict \| always` | `purge/policy.json` |
 | `prompt-inject.md` | same file, same meaning | `prompt/prompt-inject.md` |
-| #5/#8/#35/#62 approval gates | ① config `permission` ② `ctx.permission.hook("evaluate")` | `opencode.json` + plugin |
+| #5/#8/#35/#62 approval gates | ① config `permissions` (2.x array) / `permission` (1.19 map) ② `ctx.permission.hook("evaluate")` | `opencode.json` + plugin |
 | #6/#7/#13–17/#51 sandbox fences | opencode has no sandbox; allow `external_directory` and `.env` reads | `opencode.json` |
 | #21 timeout, #22 read caps | `tool_output.max_lines/max_bytes` | `opencode.json` |
 | #23 subagent depth | `experimental.subagent_depth=4` | `opencode.json` |
@@ -114,7 +114,7 @@ purge/opencode-auto.ps1          --auto wrapper
 purge/deep.json                  binary patch record
 AGENTS.md                        managed rules block (marker-delimited)
 skills/purge-*/SKILL.md          23 red-team skills
-opencode.json                    permission / tool_output / commands / experimental
+opencode.json                    permissions / permission / tool_output / commands / experimental
 ```
 
 Open a **new** session after changing the plugin or `policy.json`. The injection frame
@@ -146,7 +146,7 @@ Model tools: `purge_status`, `purge_apply`, `purge_revert`.
 flowchart TD
   A["apply"] --> B["backup originals as .opencodepurge.bak"]
   B --> C["write frame / plugin / policy"]
-  C --> D["merge opencode.json (permission / tool_output / commands / experimental)"]
+  C --> D["merge opencode.json (permissions / permission / tool_output / commands / experimental)"]
   D --> E["write managed AGENTS.md block + import skills"]
   E --> F{"--deep?"}
   F -->|yes| G["equal-length rewrite of embedded prompts, offsets recorded, every copy"]
@@ -278,6 +278,7 @@ not a hook problem — see [docs/opencode-2.x.md](docs/opencode-2.x.md).
 | no new log lines, file exists | session started before install | new session / `opencode run` probe |
 | `strip dropped=0` | anchors not matching — often after `--deep` on an older build | 1.2.0 adds the deep identity string to `BASELINE_ANCHORS` |
 | `purge_status` returns `null` | tool returned `{output}` without an output schema | 1.2.0 declares `OUT_TEXT`; re-apply |
+| approvals still prompt, but `status` says applied | the config key was ignored — 2.x reads `permissions` (array), not `permission` (map), and unknown keys are silently dropped | upgrade to 1.2.0; both keys are now written |
 | `outChars` < 20k | thin or truncated frame | `node tools/build-frame.mjs && opencode-purge apply` |
 | `outChars` ≥ 30k but still refused | model level | `baseline: strict`; try `deepseek-v4-pro` or another provider; add an explicit mapping to the frame |
 | frame edit has no effect | plugin caches `policy.json` at startup; the frame is re-read per request | frame is hot; `policy.json` needs a new session |
