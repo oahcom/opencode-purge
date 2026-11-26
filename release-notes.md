@@ -60,10 +60,16 @@
 - **实测**：stock 2.4 的 `Agent.Info` 默认值本来就是 `*/*=allow`，只有 `read *.env*` 是
   `ask`。所以真正改行为的是 AP-04；AP-01…03 只在用户自己收紧过默认值时才有效。用
   `t4` 复刻判定对拍：`read .env` 从 `ask` → `allow`，其余不变
-- 其余配置键逐个对 schema 核过，都是真的：`experimental` 是白名单
-  `["logLevel","server","subagent_depth","layout"]` + `[...,"continue_loop_on_deny"]`，
-  `subagent_depth` / `continue_loop_on_deny` 都在；`tool_output.max_lines/max_bytes` 出现在
-  截断代码路径；`commands` 是 `K(H, Ej)`；`compaction` 是 `bool()`
+- 其余配置键逐个对 schema 核过：`experimental` 有两张键表，含义相反 —— `KI`
+  （`logLevel`/`server`/`subagent_depth`/`layout`）是重命名表，读到后**提升到 config 根**；
+  `GI`（`disable_paste_summary`/`batch_tool`/`openTelemetry`/`primary_tools`/
+  `continue_loop_on_deny`）是**丢弃表**，全部交给 `qt()` 记成
+  `unsupported legacy setting` 后扔掉。`ConfigExperimental.Info` 的真实字段只有
+  `portable_shell_scanner`/`codemode_vm`/`all_flags`/`video_generate`/`part_rows`/
+  `image_generate`/`subagent_depth`/`location_idle_timeout`/`policies`。
+  所以 TL-02 原来写 `continue_loop_on_deny` 是**死数据**，已从写入里去掉了；
+  `subagent_depth` 是真的，深度那半仍然生效。`tool_output.max_lines/max_bytes` 出现在
+  截断代码路径；`commands` 是 `K(H, Ej)`；`compaction` 是 `bool()` —— 这些都活
 
 **二进制层**
 
@@ -83,6 +89,22 @@
   **合并**而不是覆盖——一次 apply 可能只够到上次被锁的那份副本
 - 新增 `deepScan()`：只读报告，逐副本列出各锚点命中数
 - 启动时清理上次 swap 留下的 `.purge.old` / `.purge.tmp`
+
+**二进制层（2.4.2 修正：长度上限换了措辞）**
+
+- 2.4.2 把 4 行上限改写了，旧锚点只覆盖长写法，短写法是一条**活着的**提示词分支，于是这份
+  副本上少打一个窗口。`apply` 当时仍报干净，因为它数的是 patch，不是锚点
+  - 旧：`…fewer than 4 lines of text (not including tool use or code generation), unless user
+    asks for detail.`（131 字节，两份构建都在）
+  - 新：`…fewer than 4 lines (not including tool use or code generation), unless user asks for
+    detail. Answer `（131 字节，少了 `of text`，句尾 `Answer ` 是句子还没说完）
+- 新增 `DEEP-LENGTH-CAP-CLI`，同 131 字节，替换串与 `DEEP-LENGTH-CAP` 一致：
+  `Answer with as much detail as the task needs; no line cap, no preamble, no closing summary, no padding.`
+- 每个 CLI 副本的窗口数：2.4.1 是 9，2.4.2 是 10
+- `deepApply` 改为逐锚点记覆盖，锚点零命中且替换串不在场时打印 `| uncovered: <bin>: <ids>`；
+  零命中但替换串已在，说明「已打过」，记为 applied，不算漏
+- 记录里的 deep patch 在合并时重新对当前字节校验，锚点文本变了或二进制换了版本
+  （2.4.1-x64 → 2.4.2-x64）就丢掉这条记录。不校验的话，回滚会拿旧偏移写 `orig`，直接把镜像写坏
 
 **文档与工具**
 
@@ -105,9 +127,8 @@
 
 **已知边界**
 
-- `DEEP-LENGTH-CAP` 的 find 串写作 `…unless user asks for detail.`；二进制里同时存在
-  `…4 lines (not including…)` 与 `…4 lines of text (not including…)` 两种变体，后者由当前
-  锚点覆盖，前者不受影响（属于不同分支的提示词）
+- `DEEP-LENGTH-CAP` / `DEEP-LENGTH-CAP-CLI` 各覆盖一种写法，2.4.2 起两种写法都是活分支，
+  两条锚点都要在；升级后先看 `deepScan()` 的逐锚点命中数
 - 1.19 专属的 `DEEP-IDENTITY-COMMON` / `DEEP-IDENTITY-BEST` 在 2.x 里已不存在，自动跳过
 - `opencode.jsonc`（带注释）无法解析时 AP-01 会跳过，需先转成纯 JSON
 - 升级 opencode 后二进制层失效，重跑 `apply --deep`

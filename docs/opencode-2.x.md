@@ -278,6 +278,24 @@ AP-01…AP-03 therefore only matter on an install where the user tightened the d
 AP-04 is the one that does work on a clean 2.4. Both generations are still written
 (`permission` **and** `permissions`) so one install serves 1.19 and 2.x.
 
+### Rules can be a chain, not just a list
+
+On 2.4.2 an array element's `_tag` may be `"rules"`, `"restrict"` (carries a `denies` list),
+`"override"` or `"fallback"`; `rE()` builds a `restrict` rule. The flat
+`{action,resource,effect}` form is still valid and is the only form this tool writes.
+
+Resolution is unchanged: `findLast` over the flattened array (`x9(...e) = e.flat()`), so
+appending at the end still wins. The 1.2.0 fix stays correct on 2.4.2.
+
+`deny` short-circuits **before** the `permission.evaluate` hook:
+
+```js
+if (Co(j, action, resources) === "deny") return deny    // runs ahead of trigger("permission","evaluate")
+```
+
+Consequence: AP-05 can flip `ask` to `allow`, it cannot rescue a `deny`. That is a known
+limit of AP-05, not a bug in the hook.
+
 ### Why nothing complained
 
 2.4 does not reject unknown config keys. Verified by running the real binary against a
@@ -298,36 +316,77 @@ Any check in this tool that only inspects `opencode.json` can therefore be a fal
 positive. The assertions in `npm test` cover the written shape; the `t4` replay above is
 what covers the meaning.
 
-Two other config keys were checked against the schema and are real:
+`experimental` has two key lists, and they mean opposite things:
 
 ```js
-EA = ["logLevel", "server", "subagent_depth", "layout"]
-yA = ["disable_paste_summary", "batch_tool", "openTelemetry", "primary_tools", "continue_loop_on_deny"]
+KI = ["logLevel", "server", "subagent_depth", "layout"]          // lifted to the config ROOT
+GI = ["disable_paste_summary", "batch_tool", "openTelemetry", "primary_tools", "continue_loop_on_deny"]
 ```
 
-`experimental` is allow-listed to those names, and both `subagent_depth` (TL-02) and
-`continue_loop_on_deny` are on it. `tool_output.max_lines` / `.max_bytes` (TL-03) appear
-in the truncation code path, and `commands` is `K(H, Ej)` — all live.
+`KI` is a rename table — `experimental.logLevel` is read and hoisted to top-level `logLevel`.
+`GI` is the opposite: it is fed to `qt()`, whose whole body is
 
-## 10. Anchor inventory on 2.4.1
+```js
+function qt(e, i, s, a) { if (!hasOwn(e, i)) return; a.push({ kind: "unsupported", path: s,
+  message: "omitted unsupported legacy setting" }) }
+```
 
-9 windows per CLI copy:
+so every `GI` key present under `experimental` is **recorded as unsupported and thrown away**.
+`ConfigExperimental.Info` on 2.4.2 has exactly these fields:
 
-| Anchor | Length | Hits | Note |
-| --- | --- | --- | --- |
-| `DEEP-24-IDENTITY` | 64 | 2 | `You are an AI agent running in OpenCode…` |
-| `DEEP-24-GOALS` | 72 | 2 | `Help the user accomplish their goals…` |
-| `DEEP-24-CONCISE` | 73 | 2 | `Keep responses clear and concise…` |
-| `DEEP-IDENTITY-HI` | 169 | 1 | 1.19 literal, still present |
-| `DEEP-REFUSAL-LINE` | 250 | 1 | `If you cannot or will not help…` |
-| `DEEP-LENGTH-CAP` | 131 | 1 | `…fewer than 4 lines of text…` |
-| `DEEP-IDENTITY-COMMON` | 81 | 0 | 1.19-only, skipped |
-| `DEEP-IDENTITY-BEST` | 54 | 0 | 1.19-only, skipped |
+```
+portable_shell_scanner, codemode_vm, all_flags, video_generate, part_rows,
+image_generate, subagent_depth, location_idle_timeout, policies
+```
 
-The length cap exists in two spellings in the binary. Only the `…4 lines of text (not
-including tool use or code generation), unless user asks for detail.` variant matches the
-anchor; the shorter `…4 lines (not including…)` variant belongs to a different prompt branch
-and is left alone. Revert restores exactly what was written, so the distinction is harmless.
+`continue_loop_on_deny` is not among them and has no replacement anywhere in the binary
+(searched `on_deny`, `onDeny`, `after_deny`, `deny_continue`, `keep_going` — only the two
+`GI` occurrences exist). TL-02 still writes it; on 2.4.2 that half of the write is inert.
+`subagent_depth` is a real field, so `TL-02`'s depth bump does work.
+
+Live keys, checked the same way: `tool_output.max_lines` / `.max_bytes` (TL-03) are read by
+the `opencode.config.tool-output` service, and `commands` is `K(H, Ej)` — both live.
+`permissions` is a root field; `permission` is not (see §9).
+
+## 10. Anchor inventory on 2.4.x
+
+Two CLI copies per install, each 278,504,840 bytes on 2.4.2:
+
+| Anchor | Length | 2.4.1 hits | 2.4.2 hits | Note |
+| --- | --- | --- | --- | --- |
+| `DEEP-24-IDENTITY` | 64 | 2 | 2 | `You are an AI agent running in OpenCode…` |
+| `DEEP-24-GOALS` | 72 | 2 | 2 | `Help the user accomplish their goals…` |
+| `DEEP-24-CONCISE` | 73 | 2 | 2 | `Keep responses clear and concise…` |
+| `DEEP-IDENTITY-HI` | 169 | 1 | 1 | 1.19 literal, still present |
+| `DEEP-REFUSAL-LINE` | 250 | 1 | 1 | `If you cannot or will not help…` |
+| `DEEP-LENGTH-CAP` | 131 | 1 | 1 | `…fewer than 4 lines of text…` |
+| `DEEP-LENGTH-CAP-CLI` | 131 | 0 | 1 | `…fewer than 4 lines…`, 2.4.2 only |
+| `DEEP-IDENTITY-COMMON` | 81 | 0 | 0 | 1.19-only, skipped |
+| `DEEP-IDENTITY-BEST` | 54 | 0 | 0 | 1.19-only, skipped |
+
+Total: 9 windows per copy on 2.4.1, 10 on 2.4.2.
+
+2.4.2 reworded the cap, so it now exists in two live spellings:
+
+- `You MUST answer concisely with fewer than 4 lines of text (not including tool use or code
+  generation), unless user asks for detail.` — 131 bytes, matched by `DEEP-LENGTH-CAP`,
+  present in both builds.
+- `You MUST answer concisely with fewer than 4 lines (not including tool use or code
+  generation), unless user asks for detail. Answer ` — 131 bytes, matched by
+  `DEEP-LENGTH-CAP-CLI`. It drops `of text` and ends mid-sentence (`Answer `) because the
+  text continues.
+
+The shorter spelling is a live prompt branch on 2.4.2, not a dead one. It went uncovered
+because the only anchor addressing the cap was the long spelling, and `apply` still reported
+a clean run because it counts patches, not anchors.
+
+`deepApply` now tracks coverage per anchor and prints `| uncovered: <bin>: <ids>` when an
+anchor hits zero times **and** its replacement is not already present. Zero hits with the
+replacement in place means "already patched" and is reported as applied, not as a hole.
+Revert restores exactly what was written, so equal lengths keep the record exact.
+
+`DEEP-LENGTH-CAP-CLI` uses the same 131-byte replacement as `DEEP-LENGTH-CAP`:
+`Answer with as much detail as the task needs; no line cap, no preamble, no closing summary, no padding.`
 
 ## 11. Verification
 
@@ -337,7 +396,7 @@ node bin/opencode-purge.js status
 
 node -e "import('./lib/deep.js').then(m => console.log(JSON.stringify(m.deepScan(), null, 2)))"
 # patched images: hits empty (anchors consumed)
-# .opencodepurge.bak originals: 9 hits per copy
+# .opencodepurge.bak originals: 10 hits per copy on 2.4.2 (9 on 2.4.1)
 ```
 
 `purge/purge.log`:
